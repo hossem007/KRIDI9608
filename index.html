@@ -52,7 +52,7 @@ button {
   border-bottom: 1px dashed #000;
   padding: 6px 0;
   cursor: pointer;
-  font-size: 18px; /* حجم الاسم والمبلغ */
+  font-size: 18px;
 }
 .receipt-line.selected { background:#e3f2fd; border-radius:6px; }
 
@@ -62,7 +62,7 @@ button {
 }
 .receipt-text span:first-child {
   text-align: right;
-  margin-right: 2px; /* المسافة من الحافة اليمنى */
+  margin-right: 2px;
   flex: 0 0 auto;
 }
 .receipt-text span:last-child {
@@ -71,7 +71,7 @@ button {
 }
 
 .date {
-  font-size: 13px; /* حجم التاريخ */
+  font-size: 13px;
   color: #555;
   margin-top: 2px;
   text-align: right;
@@ -254,9 +254,10 @@ function updateReceipt(){
   closeModal();
 }
 
-/* حذف بالكيبورد */
+/* حذف بالكيبورد فقط عند عدم الكتابة في الحقول */
 document.addEventListener("keydown", e=>{
-  if ((e.key==="Delete"||e.key==="Backspace") && selectedIndex!==null){
+  if ((e.key==="Delete"||e.key==="Backspace") && selectedIndex!==null 
+      && document.activeElement.tagName !== "INPUT") {
     if(!confirm("هل تريد حذف هذا الكريدي؟")) return;
     saveHistory();
     receipts.splice(selectedIndex,1);
