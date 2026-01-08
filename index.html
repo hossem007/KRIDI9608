@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+<meta charset="UTF-8">
+<title>قائمة الكريدي</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<style>
+body {
+  font-family: "Cairo", sans-serif;
+  direction: rtl;
+  margin: 0;
+  padding: 0;
+  background: #f4f6f8;
+}
+.container {
+  max-width: 400px;
+  margin: 40px auto;
+  background: #fff;
+  padding: 20px;
+  border-radius: 14px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+label { font-weight: bold; }
+input {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+}
+button {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-weight: bold;
+}
+.print-btn { background:#3498db; color:white; }
+.clear-btn { background:#e74c3c; color:white; }
+.undo-btn { background:#f39c12; color:white; }
+.redo-btn { background:#8e44ad; color:white; }
+
+#receiptList {
+  margin-top: 20px;
+  background: #fafafa;
+  padding: 10px;
+  border-radius: 10px;
+}
+.receipt-line {
+  border-bottom: 1px dashed #000;
+  padding: 6px 0;
+  cursor: pointer;
+  font-size: 18px; /* حجم الاسم والمبلغ */
+}
+.receipt-line.selected { background:#e3f2fd; border-radius:6px; }
+
+.receipt-text {
+  display: flex;
+  justify-content: space-between;
+}
+.receipt-text span:first-child {
+  text-align: right;
+  margin-right: 2px; /* المسافة من الحافة اليمنى */
+  flex: 0 0 auto;
+}
+.receipt-text span:last-child {
+  text-align: left;
+  flex: 0 0 auto;
+}
+
+.date {
+  font-size: 13px; /* حجم التاريخ */
+  color: #555;
+  margin-top: 2px;
+  text-align: right;
+}
+
+/* Modal للتعديل */
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 999;
+  left: 0; top: 0;
+  width: 100%; height: 100%;
+  overflow: auto;
+  background-color: rgba(0,0,0,0.4);
+}
+.modal-content {
+  background-color: #fff;
+  margin: 15% auto;
+  padding: 20px;
+  border-radius: 12px;
+  max-width: 300px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+}
+.modal-content input {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+.modal-content button {
+  width: 48%;
+  padding: 8px;
+  font-size: 14px;
+  border-radius: 6px;
+  border: none;
+}
+.update-btn { background: #27ae60; color:white; }
+.cancel-btn { background: #e74c3c; color:white; }
+
+/* الطباعة */
+@media print {
+  body * { visibility: hidden; }
+  #receiptList, #receiptList * {
+    visibility: visible !important;
+    background: white !important;
+    color: black !important;
+    font-family: Arial, sans-serif !important;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  #receiptList { position: absolute; left:0; top:0; width:100%; padding:0; margin:0; }
+  .receipt-line {
+    display:block !important;
+    border-bottom:1px dashed #000 !important;
+    padding:4px 0 !important;
+    font-size:18px !important;
+    page-break-inside:avoid;
+  }
+  .receipt-text { display:flex !important; justify-content:space-between !important; }
+  .receipt-text span:first-child { text-align:right !important; margin-right:2px; flex:0 0 auto; }
+  .receipt-text span:last-child { text-align:left !important; flex:0 0 auto; }
+  .date { font-size:13px !important; color:#555; margin-top:2px; text-align:right; }
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+  <label>الاسم:</label>
+  <input id="nameInput" placeholder="اكتب الاسم" autocomplete="off">
+  <datalist id="namesList"></datalist>
+
+  <label>المبلغ:</label>
+  <input id="amountInput" placeholder="اكتب المبلغ">
+
+  <button class="print-btn" onclick="printReceipts()">طباعة</button>
+  <button class="clear-btn" onclick="clearReceipts()">مسح الكل</button>
+  <button class="undo-btn" onclick="undo()">تراجع</button>
+  <button class="redo-btn" onclick="redo()">إعادة</button>
+
+  <div id="receiptList"></div>
+</div>
+
+<!-- Modal للتعديل -->
+<div id="editModal" class="modal">
+  <div class="modal-content">
+    <h3>تعديل الكريدي</h3>
+    <input type="text" id="editName" placeholder="الاسم">
+    <input type="text" id="editAmount" placeholder="المبلغ">
+    <div style="display:flex; justify-content:space-between;">
+      <button class="update-btn" onclick="updateReceipt()">تحديث</button>
+      <button class="cancel-btn" onclick="closeModal()">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let receipts = JSON.parse(localStorage.getItem("receipts")) || [];
+let names = JSON.parse(localStorage.getItem("names")) || [];
+let historyStack = [];
+let redoStack = [];
+let selectedIndex = null;
+let editIndex = null;
+
+/* اقتراح أسماء */
+function renderNames(filter) {
+  const list = document.getElementById("namesList");
+  list.innerHTML = "";
+  if (!filter) return;
+  names.filter(n => n.startsWith(filter))
+       .forEach(n => list.innerHTML += `<option value="${n}">`);
+  nameInput.setAttribute("list", "namesList");
+}
+
+nameInput.addEventListener("input", () => {
+  if (!nameInput.value) nameInput.removeAttribute("list");
+  else renderNames(nameInput.value);
+});
+
+nameInput.addEventListener("keydown", e => {
+  if (e.key === "Tab") {
+    const m = names.find(n => n.startsWith(nameInput.value));
+    if (m) { e.preventDefault(); nameInput.value = m; amountInput.focus(); }
+  }
+});
+
+amountInput.addEventListener("keydown", e => { if(e.key==="Enter") addCredit(); });
+
+function addCredit() {
+  const name = nameInput.value.trim();
+  const amount = amountInput.value.trim();
+  if (!name || !amount) return;
+  saveHistory(); redoStack=[];
+  const date = new Date().toLocaleDateString("fr-CA");
+  receipts.push({ name, amount, date });
+  if (!names.includes(name)) { names.push(name); localStorage.setItem("names", JSON.stringify(names)); }
+  localStorage.setItem("receipts", JSON.stringify(receipts));
+  nameInput.value=""; amountInput.value=""; nameInput.focus();
+  renderReceipts();
+}
+
+function renderReceipts() {
+  const receiptList = document.getElementById("receiptList");
+  receiptList.innerHTML = "";
+  receipts.forEach((r,i)=>{
+    receiptList.innerHTML += `
+      <div class="receipt-line ${selectedIndex===i?'selected':''}" ondblclick="openEditModal(${i})" onclick="selectReceipt(${i})">
+        <div class="receipt-text">
+          <span>${r.name}</span>
+          <span>${r.amount}</span>
+        </div>
+        <div class="date">${r.date}</div>
+      </div>`;
+  });
+}
+
+function selectReceipt(i){ selectedIndex=i; renderReceipts(); }
+
+/* فتح Modal */
+function openEditModal(i){
+  editIndex=i;
+  document.getElementById("editName").value=receipts[i].name;
+  document.getElementById("editAmount").value=receipts[i].amount;
+  document.getElementById("editModal").style.display="block";
+}
+
+/* إغلاق Modal */
+function closeModal(){ document.getElementById("editModal").style.display="none"; }
+
+function updateReceipt(){
+  const newName = document.getElementById("editName").value.trim();
+  const newAmount = document.getElementById("editAmount").value.trim();
+  if(!newName || !newAmount) return;
+  saveHistory(); redoStack=[];
+  receipts[editIndex].name=newName;
+  receipts[editIndex].amount=newAmount;
+  if(!names.includes(newName)) { names.push(newName); localStorage.setItem("names", JSON.stringify(names)); }
+  localStorage.setItem("receipts", JSON.stringify(receipts));
+  renderReceipts();
+  closeModal();
+}
+
+/* حذف بالكيبورد */
+document.addEventListener("keydown", e=>{
+  if ((e.key==="Delete"||e.key==="Backspace") && selectedIndex!==null){
+    if(!confirm("هل تريد حذف هذا الكريدي؟")) return;
+    saveHistory();
+    receipts.splice(selectedIndex,1);
+    selectedIndex=null;
+    localStorage.setItem("receipts", JSON.stringify(receipts));
+    renderReceipts();
+  }
+});
+
+/* Undo/Redo */
+function saveHistory(){ historyStack.push(JSON.stringify(receipts)); }
+function undo(){ if(!historyStack.length) return; redoStack.push(JSON.stringify(receipts)); receipts = JSON.parse(historyStack.pop()); localStorage.setItem("receipts", JSON.stringify(receipts)); renderReceipts(); }
+function redo(){ if(!redoStack.length) return; historyStack.push(JSON.stringify(receipts)); receipts = JSON.parse(redoStack.pop()); localStorage.setItem("receipts", JSON.stringify(receipts)); renderReceipts(); }
+
+function clearReceipts(){ if(!confirm("مسح الكل؟")) return; saveHistory(); receipts=[]; localStorage.removeItem("receipts"); renderReceipts(); }
+
+function printReceipts(){ window.print(); }
+
+renderReceipts();
+</script>
+</body>
+</html>
